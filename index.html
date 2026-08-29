@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OB-kalender · lön och skatt för butiksanställda</title>
+<meta name="description" content="Lägg in dina pass, få ut lön med OB-tillägg och preliminärskatt. Räknar efter Handels regler för butik och Coop.">
+<meta name="theme-color" content="#E7EBF0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='3' fill='%231B6B54'/><text x='16' y='23' font-size='18' font-family='monospace' font-weight='bold' fill='%23FDFDFC' text-anchor='middle'>kr</text></svg>">
+<style>
+:root {
+  --paper:#E7EBF0;
+  --card:#FDFDFC;
+  --ink:#16202C;
+  --ink2:#5D6B79;
+  --line:#C9D2DC;
+  --grund:#1B6B54;
+  --p50:#C79A2B;
+  --p70:#C4562C;
+  --p100:#8E2F4A;
+  --mark:#2F5FA8;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing:border-box; }
+html, body { margin:0; padding:0; }
+body {
+  background:var(--paper); color:var(--ink); font-family:var(--sans);
+  padding:18px 14px 40px; -webkit-font-smoothing:antialiased; min-height:100vh;
+}
+button { font:inherit; color:inherit; cursor:pointer; }
+:focus-visible { outline:2px solid var(--mark); outline-offset:2px; }
+.wrap { max-width:980px; margin:0 auto; }
+
+.head { display:flex; align-items:center; gap:8px; margin-bottom:16px; }
+.month { font-family:var(--mono); font-size:14px; letter-spacing:.14em; text-transform:uppercase;
+  font-weight:600; flex:1; min-width:0; margin:0; }
+.month span { color:var(--ink2); font-weight:400; }
+.btn { height:34px; min-width:34px; padding:0 10px; border:1px solid var(--line); background:var(--card);
+  border-radius:2px; font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+  display:inline-grid; place-items:center; line-height:1; }
+.btn:hover { border-color:var(--ink); }
+.btn[data-on="true"] { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+
+.cols { display:grid; gap:16px; grid-template-columns:1fr; align-items:start; }
+@media (min-width:880px) {
+  .cols { grid-template-columns:minmax(0,1.55fr) minmax(290px,1fr); }
+  .stub-col { position:sticky; top:18px; }
+}
+
+.stub { background:var(--card); border:1px solid var(--line); border-radius:2px; padding:16px 16px 0;
+  position:relative; overflow:hidden; }
+.lbl { font-family:var(--mono); font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--ink2); }
+.sum { font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:clamp(30px,8vw,42px);
+  font-weight:600; line-height:1.05; letter-spacing:-.02em; color:var(--grund); margin:6px 0 2px; word-break:break-all; }
+.sub { font-family:var(--mono); font-size:11px; color:var(--ink2); margin-bottom:16px; line-height:1.6; }
+.perf { position:relative; height:0; border-top:1px dashed var(--line); margin:0 -16px; }
+.perf::before, .perf::after { content:""; position:absolute; top:-7px; width:14px; height:14px;
+  border-radius:50%; background:var(--paper); border:1px solid var(--line); }
+.perf::before { left:-8px; } .perf::after { right:-8px; }
+.lines { padding:14px 0 16px; }
+.row { display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:baseline;
+  font-family:var(--mono); font-size:12px; padding:5px 0; font-variant-numeric:tabular-nums; }
+.row .k { letter-spacing:.05em; text-transform:uppercase; font-size:10px; color:var(--ink2);
+  display:flex; align-items:center; gap:6px; }
+.row .h { color:var(--ink2); min-width:52px; text-align:right; }
+.row .v { min-width:86px; text-align:right; }
+.row[data-off="true"] { opacity:.4; }
+.row[data-plus="true"] .v { color:var(--grund); }
+.dot { width:8px; height:8px; border-radius:1px; flex:none; }
+.rule { border-top:1px solid var(--line); margin:8px 0; }
+.empty { font-family:var(--mono); font-size:11.5px; color:var(--ink2); line-height:1.7; padding:14px 0 18px; }
+.more { border:none; background:none; padding:6px 0 0; font-family:var(--mono); font-size:10px;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--ink2); text-decoration:underline;
+  text-underline-offset:3px; }
+
+.cal { background:var(--card); border:1px solid var(--line); border-radius:2px; padding:10px; }
+.dow { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:6px; }
+.dow span { font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--ink2); text-align:center; padding-bottom:4px; border-bottom:1px solid var(--line); }
+.grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.cell { position:relative; aspect-ratio:1/1.15; border:1px solid var(--line); background:transparent;
+  border-radius:2px; padding:4px 3px; text-align:left; display:flex; flex-direction:column;
+  transition:border-color .12s ease, background .12s ease; }
+.cell[data-blank="true"] { border-color:transparent; pointer-events:none; }
+.cell[data-free="true"] { background:#F0F3F6; }
+.cell:hover { border-color:var(--ink2); }
+.cell[data-sel="true"] { border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink); }
+.cell[data-worked="true"] { background:#EAF3EF; border-color:#B6D3C7; }
+.dnum { font-family:var(--mono); font-size:11px; color:var(--ink2); font-variant-numeric:tabular-nums;
+  align-self:flex-start; }
+.cell[data-red="true"] .dnum { color:var(--p100); font-weight:700; }
+.cell[data-today="true"] .dnum { color:var(--card); background:var(--mark); border-radius:2px; padding:0 3px; }
+.dh { margin-top:auto; font-family:var(--mono); font-size:11.5px; font-weight:600;
+  font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
+.bar { display:flex; height:3px; margin-top:3px; }
+.bar i { display:block; height:100%; }
+
+.ed { background:var(--card); border:1px solid var(--ink); border-radius:2px; padding:14px; margin-top:12px; }
+.ed-top { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:4px; }
+.ed-date { font-family:var(--mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
+.ed-pay { font-family:var(--mono); font-size:13px; font-weight:600; color:var(--grund);
+  font-variant-numeric:tabular-nums; }
+.red { font-family:var(--mono); font-size:10.5px; color:var(--p100); letter-spacing:.06em;
+  text-transform:uppercase; margin-bottom:12px; min-height:14px; }
+.times { display:flex; align-items:flex-end; gap:8px; flex-wrap:wrap; }
+.tf { display:flex; flex-direction:column; gap:4px; flex:1 1 96px; min-width:0; }
+.tf label { font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink2); }
+.tf input { border:1px solid var(--line); border-radius:2px; padding:9px 8px; background:var(--card);
+  font-family:var(--mono); font-size:17px; font-weight:600; color:var(--ink); width:100%;
+  font-variant-numeric:tabular-nums; }
+.dash { font-family:var(--mono); color:var(--ink2); padding-bottom:12px; }
+.chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.chip { border:1px solid var(--line); background:var(--paper); border-radius:2px; padding:6px 10px;
+  font-family:var(--mono); font-size:11px; letter-spacing:.03em; }
+.chip:hover { border-color:var(--ink); }
+.chip[data-danger="true"] { color:var(--p70); border-color:#E3C4B7; margin-left:auto; }
+.split:not(:empty) { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+
+.set { background:var(--card); border:1px solid var(--line); border-radius:2px; padding:14px; margin-bottom:16px; }
+.set h2 { font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink2); margin:0 0 12px; font-weight:600; }
+.set h2.seth { margin-top:20px; padding-top:14px; border-top:1px solid var(--line); }
+.fields { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); }
+.field { display:flex; flex-direction:column; gap:5px; }
+.field label { font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink2); }
+.field input, .field select { border:1px solid var(--line); border-radius:2px; padding:8px 9px;
+  background:var(--card); font-family:var(--mono); font-size:14px; color:var(--ink); width:100%; }
+.check { display:flex; align-items:flex-start; gap:8px; margin-top:10px; font-family:var(--mono);
+  font-size:11.5px; line-height:1.5; }
+.check input { width:16px; height:16px; accent-color:var(--grund); flex:none; margin-top:1px; }
+.rules { font-family:var(--mono); font-size:11px; color:var(--ink2); line-height:1.8; margin-top:14px;
+  border-top:1px solid var(--line); padding-top:12px; }
+.rules b { color:var(--ink); }
+.reset { margin-top:16px; border:none; background:none; padding:0; font-family:var(--mono);
+  font-size:11px; color:var(--p70); text-decoration:underline; text-underline-offset:3px; }
+.legend { display:flex; flex-wrap:wrap; gap:12px; margin-top:10px; font-family:var(--mono);
+  font-size:10px; color:var(--ink2); }
+.legend span { display:flex; align-items:center; gap:5px; }
+.note { font-family:var(--mono); font-size:10.5px; color:var(--ink2); text-align:center;
+  margin-top:16px; line-height:1.7; }
+.note a { color:var(--ink2); }
+@media (prefers-reduced-motion:reduce) { * { transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <button class="btn" id="prev" aria-label="Föregående månad">‹</button>
+    <button class="btn" id="next" aria-label="Nästa månad">›</button>
+    <h1 class="month" id="titel"></h1>
+    <button class="btn" id="toggleSet">Lön</button>
+  </div>
+
+  <div id="setBox"></div>
+
+  <div class="cols">
+    <div class="stub-col">
+      <div class="stub" id="stub"></div>
+      <div class="note" id="medd" hidden></div>
+    </div>
+    <div>
+      <div class="cal">
+        <div class="dow" id="dow"></div>
+        <div class="grid" id="grid"></div>
+      </div>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--grund)"></i>Utan OB</span>
+        <span><i class="dot" style="background:var(--p50)"></i>50 %</span>
+        <span><i class="dot" style="background:var(--p70)"></i>70 %</span>
+        <span><i class="dot" style="background:var(--p100)"></i>100 %</span>
+      </div>
+      <div id="edBox"></div>
+    </div>
+  </div>
+
+  <div class="note" id="fot"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ================================================================== */
+/*  Datum och helgdagar                                               */
+/* ================================================================== */
+
+var MAN = ["januari","februari","mars","april","maj","juni",
+  "juli","augusti","september","oktober","november","december"];
+var DAG = ["Söndag","Måndag","Tisdag","Onsdag","Torsdag","Fredag","Lördag"];
+var DAG_K = ["Sön","Mån","Tis","Ons","Tor","Fre","Lör"];
+
+function pad(n) { return String(n).padStart(2, "0"); }
+function dagKey(d) { return (d.getMonth() + 1) + "-" + d.getDate(); }
+function addDays(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+
+function easter(y) {
+  var a = y % 19, b = Math.floor(y / 100), c = y % 100;
+  var d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  var g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  var i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  var m = Math.floor((a + 11 * h + 22 * l) / 451);
+  var mo = Math.floor((h + l - 7 * m + 114) / 31);
+  var da = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(y, mo - 1, da);
+}
+function satBetween(y, mo, from, to) {
+  for (var d = from; d <= to; d++) {
+    var x = new Date(y, mo, d);
+    if (x.getDay() === 6) return x;
+  }
+  return null;
+}
+
+var helgCache = {};
+function helgdagar(y) {
+  if (helgCache[y]) return helgCache[y];
+  var e = easter(y);
+  var midsommardagen = satBetween(y, 5, 20, 26);
+  var map = {};
+  function rod(d, namn) { map[dagKey(d)] = { typ: "rod", namn: namn }; }
+  function halv(d, namn) { map[dagKey(d)] = { typ: "halv", namn: namn }; }
+
+  rod(new Date(y, 0, 1), "Nyårsdagen");
+  rod(new Date(y, 0, 6), "Trettondedag jul");
+  rod(addDays(e, -2), "Långfredagen");
+  rod(e, "Påskdagen");
+  rod(addDays(e, 1), "Annandag påsk");
+  rod(new Date(y, 4, 1), "Första maj");
+  rod(addDays(e, 39), "Kristi himmelsfärdsdag");
+  rod(new Date(y, 5, 6), "Nationaldagen");
+  rod(addDays(e, 49), "Pingstdagen");
+  if (midsommardagen) rod(midsommardagen, "Midsommardagen");
+  var allhelgon = satBetween(y, 9, 31, 31) || satBetween(y, 10, 1, 6);
+  if (allhelgon) rod(allhelgon, "Alla helgons dag");
+  rod(new Date(y, 11, 25), "Juldagen");
+  rod(new Date(y, 11, 26), "Annandag jul");
+
+  halv(addDays(e, -1), "Påskafton");
+  if (midsommardagen) halv(addDays(midsommardagen, -1), "Midsommarafton");
+  halv(new Date(y, 11, 24), "Julafton");
+  halv(new Date(y, 11, 31), "Nyårsafton");
+
+  helgCache[y] = map;
+  return map;
+}
+function dagInfo(d, on) { return on ? (helgdagar(d.getFullYear())[dagKey(d)] || null) : null; }
+
+/* ================================================================== */
+/*  OB-regler (butik enligt Handels, med Coops morgontillägg)         */
+/* ================================================================== */
+
+function bandsFor(d, o) {
+  var info = dagInfo(d, o.rodaDagar);
+  var out = [];
+  function push(f, t, p) { if (t > f) out.push({ from: f, to: t, pct: p }); }
+  var natt = o.nattOB ? 70 : 0;
+  var morgon = o.coopMorgon ? 50 : 0;
+
+  if (info && info.typ === "rod") { push(0, 1440, 100); return out; }
+  var dow = d.getDay();
+  if (dow === 0) { push(0, 1440, 100); return out; }
+  if (dow === 6 || (info && info.typ === "halv")) {
+    push(0, 300, natt); push(300, 360, morgon); push(360, 720, 0); push(720, 1440, 100);
+    return out;
+  }
+  push(0, 300, natt); push(300, 360, morgon); push(360, 1095, 0);
+  push(1095, 1200, 50); push(1200, 1440, 70);
+  return out;
+}
+
+function toMin(t) {
+  if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return null;
+  var p = t.split(":");
+  var h = Number(p[0]), m = Number(p[1]);
+  return (h > 23 || m > 59) ? null : h * 60 + m;
+}
+
+function raknaPass(d, p, o) {
+  if (!p) return null;
+  var s = toMin(p.s), e0 = toMin(p.e);
+  if (s === null || e0 === null) return null;
+  var e = e0 <= s ? e0 + 1440 : e0;
+  var rast = Math.max(0, Math.min(e - s, Number(p.r) || 0));
+  var mitt = (s + e) / 2;
+  var delar = rast > 0
+    ? [[s, mitt - rast / 2], [mitt + rast / 2, e]].filter(function (x) { return x[1] > x[0]; })
+    : [[s, e]];
+
+  var bands = bandsFor(d, o).slice();
+  bandsFor(addDays(d, 1), o).forEach(function (b) {
+    bands.push({ from: b.from + 1440, to: b.to + 1440, pct: b.pct });
+  });
+
+  var per = { 0: 0, 50: 0, 70: 0, 100: 0 };
+  var t = 0;
+  delar.forEach(function (iv) {
+    t += (iv[1] - iv[0]) / 60;
+    bands.forEach(function (band) {
+      var lo = Math.max(iv[0], band.from), hi = Math.min(iv[1], band.to);
+      if (hi > lo) per[band.pct] += (hi - lo) / 60;
+    });
+  });
+  return { tim: t, per: per, overMidnatt: e > 1440 };
+}
+
+/* ================================================================== */
+/*  Preliminärskatt, inkomstår 2026                                   */
+/*  Följer Skatteverkets tekniska beskrivning av skattetabellerna.    */
+/* ================================================================== */
+
+var PBB = 59200;          // prisbasbelopp 2026
+var IBB = 83400;          // inkomstbasbelopp 2026
+var SKIKT = 643000;       // skiktgräns för statlig skatt
+var APA_TAK = 673038;     // tak för allmän pensionsavgift
+var PS_TAK = 1.42 * IBB;  // tak för public service-avgift
+
+function grundavdragRaw(ffi) {
+  var ga;
+  if (ffi <= 0.99 * PBB) ga = 0.423 * PBB;
+  else if (ffi <= 2.72 * PBB) ga = 0.423 * PBB + 0.2 * (ffi - 0.99 * PBB);
+  else if (ffi <= 3.11 * PBB) ga = 0.77 * PBB;
+  else if (ffi <= 7.88 * PBB) ga = 0.77 * PBB - 0.1 * (ffi - 3.11 * PBB);
+  else ga = 0.293 * PBB;
+  return Math.min(ga, ffi);
+}
+function forhojdDel(ffi) {
+  var p = PBB;
+  if (ffi <= 0.91 * p) return 0.687 * p;
+  if (ffi <= 1.11 * p) return 0.885 * p - ffi * 0.2;
+  if (ffi <= 1.965 * p) return 0.6 * p + ffi * 0.057;
+  if (ffi <= 2.72 * p) return 0.333 * p + ffi * 0.1949;
+  if (ffi <= 3.11 * p) return ffi * 0.3949 - 0.212 * p;
+  if (ffi <= 3.24 * p) return ffi * 0.4949 - 0.523 * p;
+  if (ffi <= 5.0 * p) return ffi * 0.356 - 0.073 * p;
+  if (ffi <= 7.88 * p) return 0.017 * p + ffi * 0.338;
+  if (ffi <= 8.08 * p) return 0.703 * p + ffi * 0.251;
+  if (ffi <= 11.16 * p) return 2.732 * p;
+  if (ffi <= 12.84 * p) return 9.651 * p - ffi * 0.62;
+  return 1.691 * p;
+}
+function upp100(n) { return Math.ceil(n / 100) * 100; }
+
+function jobbskatteavdrag(ai, ga, ki, aldre) {
+  var x;
+  if (aldre) {
+    if (ai <= 1.75 * PBB) x = ai * 0.22;
+    else if (ai <= 5.24 * PBB) x = 0.2635 * PBB + ai * 0.07;
+    else x = 0.6293 * PBB;
+    return Math.max(0, Math.floor(x));
+  }
+  if (ai <= 0.91 * PBB) x = ai - ga;
+  else if (ai <= 3.24 * PBB) x = 0.91 * PBB + 0.3874 * (ai - 0.91 * PBB) - ga;
+  else if (ai <= 8.08 * PBB) x = 1.813 * PBB + 0.251 * (ai - 3.24 * PBB) - ga;
+  else x = 3.027 * PBB - ga;
+  return Math.max(0, Math.floor(x * ki));
+}
+
+// Månadsinkomsten avrundas upp till toppen av tabellens inkomstskikt,
+// precis som när arbetsgivaren läser i skattetabellen.
+function skiktTopp(m) {
+  if (m <= 20000) return Math.ceil(m / 100) * 100;
+  if (m <= 80000) return 20000 + Math.ceil((m - 20000) / 200) * 200;
+  return m;
+}
+
+function raknaSkatt(manadsBrutto, o) {
+  if (!(manadsBrutto > 0)) return { skatt: 0, netto: 0, delar: null };
+
+  var ki = (Number(o.kommunalskatt) || 0) / 100;
+  var begr = (Number(o.begravningsavgift) || 0) / 100;
+  var kyrko = o.kyrkomedlem ? (Number(o.kyrkoavgift) || 0) / 100 : 0;
+  var aldre = o.alder === "66";
+
+  var ffi = Math.floor((skiktTopp(manadsBrutto) * 12) / 100) * 100;
+  var ga = aldre ? upp100(grundavdragRaw(ffi) + forhojdDel(ffi)) : upp100(grundavdragRaw(ffi));
+  var bfi = Math.max(0, ffi - ga);
+
+  var kommunal = Math.floor(bfi * ki);
+  var statlig = (bfi - SKIKT >= 200) ? Math.floor((bfi - SKIKT) * 0.2) : 0;
+  var avgifter = Math.floor(bfi * (begr + kyrko));
+
+  // 7 %, avrundat till hundratal. Belopp som slutar på exakt 50 kr avrundas nedåt,
+  // så råvärdet städas från flyttalsbrus först.
+  var apa = 0;
+  if (ffi >= 25042) {
+    var raw = Math.round(0.07 * Math.min(ffi, APA_TAK) * 100) / 100;
+    var hela = Math.floor(raw / 100);
+    apa = ((raw - hela * 100 > 50) ? hela + 1 : hela) * 100;
+  }
+
+  var kvarK = kommunal, kvarS = statlig;
+  var redApa = Math.min(apa, kvarK + kvarS);
+  var apaFranK = Math.min(redApa, kvarK);
+  kvarK -= apaFranK;
+  kvarS -= redApa - apaFranK;
+
+  var arbetsinkomst = Math.floor(ffi / 100) * 100;
+  var jsa = Math.min(jobbskatteavdrag(arbetsinkomst, ga, ki, aldre), kvarK);
+  kvarK -= jsa;
+
+  var sfiFull = 0;
+  if (bfi > 40000) sfiFull = bfi >= 240000 ? 1500 : Math.floor((bfi - 40000) * 0.0075);
+  var sfi = Math.min(sfiFull, kvarK);
+  kvarK -= sfi;
+
+  var publicService = (o.alder === "u18") ? 0 : Math.floor(Math.min(bfi, PS_TAK) * 0.01);
+
+  var arsskatt = kvarK + kvarS + avgifter + apa + publicService;
+  var skatt = Math.round(arsskatt / 12);
+
+  return {
+    skatt: skatt,
+    netto: manadsBrutto - skatt,
+    delar: {
+      kommunal: kommunal / 12,
+      statlig: statlig / 12,
+      jsa: jsa / 12,
+      sfi: sfi / 12,
+      apaNetto: (apa - redApa) / 12,
+      avgifter: avgifter / 12,
+      publicService: publicService / 12
+    }
+  };
+}
+
+/* ================================================================== */
+/*  Formatering                                                       */
+/* ================================================================== */
+
+function kr(n) {
+  var d = Math.abs(n).toFixed(2).split(".");
+  return (n < 0 ? "−" : "") + d[0].replace(/\B(?=(\d{3})+(?!\d))/g, "\u00A0") + "," + d[1] + "\u00A0kr";
+}
+function tim(h) { return String(Math.round(h * 100) / 100).replace(".", ",") + " h"; }
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+var FARG = { 0: "var(--grund)", 50: "var(--p50)", 70: "var(--p70)", 100: "var(--p100)" };
+
+/* ================================================================== */
+/*  Lagring i webbläsaren                                             */
+/* ================================================================== */
+
+var STANDARD = {
+  form: "tim", timlon: 160.4, manadslon: 26626, rast: 30,
+  coopMorgon: true, nattOB: true, rodaDagar: true,
+  senaste: { s: "10:00", e: "18:00", r: 30 },
+  raknaSkatt: true, kommunalskatt: 32.38, begravningsavgift: 0.292,
+  kyrkomedlem: false, kyrkoavgift: 1.0, alder: "vux"
+};
+
+function las(nyckel, fallback) {
+  try {
+    var v = localStorage.getItem(nyckel);
+    return v ? JSON.parse(v) : fallback;
+  } catch (err) { return fallback; }
+}
+function spara(nyckel, varde) {
+  try { localStorage.setItem(nyckel, JSON.stringify(varde)); return true; }
+  catch (err) { return false; }
+}
+
+var nu = new Date();
+var S = {
+  pek: { y: nu.getFullYear(), m: nu.getMonth() },
+  inst: Object.assign({}, STANDARD, las("coop:installningar", {})),
+  pass: {},
+  vald: null,
+  visaInst: false,
+  visaSkatt: false
+};
+
+function manadsId() { return S.pek.y + "-" + pad(S.pek.m + 1); }
+function laddaManad() { S.pass = las("coop:" + manadsId(), {}); }
+function sparaManad() {
+  if (!spara("coop:" + manadsId(), S.pass)) visaMedd("Kunde inte spara. Webbläsaren tillåter inte lagring här.");
+}
+function sparaInst() { spara("coop:installningar", S.inst); }
+
+function visaMedd(text) {
+  var el = document.getElementById("medd");
+  el.textContent = text || "";
+  el.hidden = !text;
+}
+
+/* ================================================================== */
+/*  Beräkning för hela månaden                                        */
+/* ================================================================== */
+
+function timlon() {
+  return S.inst.form === "manad"
+    ? (Number(S.inst.manadslon) || 0) / 166
+    : (Number(S.inst.timlon) || 0);
+}
+
+function berakna() {
+  var dagarIMan = new Date(S.pek.y, S.pek.m + 1, 0).getDate();
+  var tl = timlon();
+  var perDag = {}, per = { 0: 0, 50: 0, 70: 0, 100: 0 };
+  var timmar = 0, dagar = 0;
+
+  for (var d = 1; d <= dagarIMan; d++) {
+    var r = raknaPass(new Date(S.pek.y, S.pek.m, d), S.pass[d], S.inst);
+    if (!r || r.tim <= 0) continue;
+    perDag[d] = r;
+    timmar += r.tim; dagar++;
+    [0, 50, 70, 100].forEach(function (k) { per[k] += r.per[k]; });
+  }
+
+  var obKr = { 50: per[50] * tl * 0.5, 70: per[70] * tl * 0.7, 100: per[100] * tl };
+  var obTotal = obKr[50] + obKr[70] + obKr[100];
+  var grund = S.inst.form === "manad" ? (Number(S.inst.manadslon) || 0) : timmar * tl;
+  var brutto = grund + obTotal;
+  var sk = S.inst.raknaSkatt ? raknaSkatt(brutto, S.inst) : { skatt: 0, netto: brutto, delar: null };
+
+  return {
+    dagarIMan: dagarIMan, perDag: perDag, per: per, timmar: timmar, dagar: dagar,
+    obKr: obKr, obTotal: obTotal, grund: grund, brutto: brutto,
+    skatt: sk.skatt, netto: sk.netto, delar: sk.delar
+  };
+}
+
+/* ================================================================== */
+/*  Rendering                                                         */
+/* ================================================================== */
+
+function radOB(B, p) {
+  return '<div class="row" data-off="' + (B.per[p] === 0) + '">' +
+    '<span class="k"><i class="dot" style="background:' + FARG[p] + '"></i>OB ' + p + ' %</span>' +
+    '<span class="h">' + tim(B.per[p]) + '</span>' +
+    '<span class="v">' + kr(B.obKr[p]) + '</span></div>';
+}
+function radSkatt(etikett, belopp, plus) {
+  return '<div class="row" data-plus="' + !!plus + '" data-off="' + (belopp === 0) + '">' +
+    '<span class="k">' + esc(etikett) + '</span><span class="h"></span>' +
+    '<span class="v">' + kr(plus ? belopp : -belopp) + '</span></div>';
+}
+
+function renderStub(B) {
+  var i = S.inst;
+  var h = '';
+  h += '<div class="lbl">' + (i.raknaSkatt ? "Kvar efter skatt" : "Brutto") + ' · ' +
+       MAN[S.pek.m] + ' ' + S.pek.y + '</div>';
+  h += '<div class="sum">' + kr(i.raknaSkatt ? B.netto : B.brutto) + '</div>';
+
+  var harNagot = B.dagar > 0 || (i.form === "manad" && B.brutto > 0);
+  h += '<div class="sub">';
+  if (harNagot) {
+    if (i.raknaSkatt) h += 'brutto ' + kr(B.brutto) + '<br>';
+    h += tim(B.timmar) + ' på ' + B.dagar + ' dag' + (B.dagar === 1 ? '' : 'ar');
+  } else {
+    h += 'före skatt';
+  }
+  h += '</div><div class="perf"></div>';
+
+  if (!harNagot) {
+    h += '<div class="empty">Inga pass den här månaden.<br>Tryck på en dag för att lägga in tider.</div>';
+    document.getElementById("stub").innerHTML = h;
+    return;
+  }
+
+  h += '<div class="lines">';
+  h += '<div class="row"><span class="k">' + (i.form === "manad" ? "Månadslön" : "Grundlön") + '</span>' +
+       '<span class="h">' + (i.form === "manad" ? "" : tim(B.timmar)) + '</span>' +
+       '<span class="v">' + kr(B.grund) + '</span></div>';
+  h += radOB(B, 50) + radOB(B, 70) + radOB(B, 100);
+  h += '<div class="rule"></div>';
+  h += '<div class="row"><span class="k"><b>Brutto</b></span><span class="h">' + tim(B.timmar) +
+       '</span><span class="v"><b>' + kr(B.brutto) + '</b></span></div>';
+
+  if (i.raknaSkatt && B.delar) {
+    h += '<div class="rule"></div>';
+    if (S.visaSkatt) {
+      h += radSkatt("Kommunalskatt", B.delar.kommunal);
+      if (B.delar.statlig > 0) h += radSkatt("Statlig skatt", B.delar.statlig);
+      h += radSkatt("Jobbskatteavdrag", B.delar.jsa, true);
+      if (B.delar.sfi > 0) h += radSkatt("Skattereduktion förvärvsinkomst", B.delar.sfi, true);
+      if (B.delar.apaNetto > 0) h += radSkatt("Allmän pensionsavgift", B.delar.apaNetto);
+      h += radSkatt(i.kyrkomedlem ? "Begravnings- och kyrkoavgift" : "Begravningsavgift", B.delar.avgifter);
+      if (B.delar.publicService > 0) h += radSkatt("Public service-avgift", B.delar.publicService);
+      h += '<div class="rule"></div>';
+    }
+    var pct = B.brutto > 0 ? (B.skatt / B.brutto) * 100 : 0;
+    h += '<div class="row"><span class="k">Preliminärskatt</span><span class="h">' +
+         pct.toFixed(1).replace(".", ",") + ' %</span><span class="v">' + kr(-B.skatt) + '</span></div>';
+    h += '<div class="row"><span class="k"><b>Att få ut</b></span><span class="h"></span>' +
+         '<span class="v"><b>' + kr(B.netto) + '</b></span></div>';
+    h += '<button class="more" id="toggleSkatt">' +
+         (S.visaSkatt ? "Dölj skattedetaljer" : "Visa skattedetaljer") + '</button>';
+  }
+  h += '</div>';
+
+  document.getElementById("stub").innerHTML = h;
+  var t = document.getElementById("toggleSkatt");
+  if (t) t.addEventListener("click", function () { S.visaSkatt = !S.visaSkatt; rita(); });
+}
+
+function renderGrid(B) {
+  var dow = document.getElementById("dow");
+  dow.innerHTML = [1, 2, 3, 4, 5, 6, 0].map(function (i) {
+    return "<span>" + DAG_K[i] + "</span>";
+  }).join("");
+
+  var offset = (new Date(S.pek.y, S.pek.m, 1).getDay() + 6) % 7;
+  var idag = new Date();
+  var dennaMan = S.pek.y === idag.getFullYear() && S.pek.m === idag.getMonth();
+  var h = "";
+
+  for (var b = 0; b < offset; b++) h += '<button class="cell" data-blank="true" tabindex="-1" aria-hidden="true"></button>';
+
+  for (var d = 1; d <= B.dagarIMan; d++) {
+    var datum = new Date(S.pek.y, S.pek.m, d);
+    var info = dagInfo(datum, S.inst.rodaDagar);
+    var r = B.perDag[d];
+    var helg = datum.getDay() === 0 || datum.getDay() === 6;
+    var etikett = d + " " + MAN[S.pek.m] + (info ? ", " + info.namn : "") +
+      (r ? ", " + tim(r.tim) : ", inget pass");
+
+    h += '<button class="cell" data-dag="' + d + '"' +
+      ' data-free="' + (helg && !r) + '"' +
+      ' data-red="' + (!!info && info.typ === "rod") + '"' +
+      ' data-today="' + (dennaMan && d === idag.getDate()) + '"' +
+      ' data-sel="' + (S.vald === d) + '"' +
+      ' data-worked="' + !!r + '"' +
+      ' aria-label="' + esc(etikett) + '">' +
+      '<span class="dnum">' + pad(d) + '</span>';
+    if (r) {
+      h += '<span class="dh">' + tim(r.tim).replace(" h", "") + '</span><span class="bar" aria-hidden="true">';
+      [0, 50, 70, 100].forEach(function (p) {
+        if (r.per[p] > 0) h += '<i style="width:' + (r.per[p] / r.tim) * 100 + '%;background:' + FARG[p] + '"></i>';
+      });
+      h += '</span>';
+    }
+    h += '</button>';
+  }
+
+  var grid = document.getElementById("grid");
+  grid.innerHTML = h;
+  grid.querySelectorAll("[data-dag]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var d = Number(btn.getAttribute("data-dag"));
+      S.vald = (S.vald === d) ? null : d;
+      rita();
+    });
+  });
+}
+
+function andraDag(dag, delta) {
+  var p = Object.assign({ s: "", e: "", r: S.inst.rast }, S.pass[dag] || {}, delta);
+  if (!p.s && !p.e) delete S.pass[dag]; else S.pass[dag] = p;
+  sparaManad();
+  if (p.s && p.e) { S.inst.senaste = { s: p.s, e: p.e, r: p.r }; sparaInst(); }
+}
+
+function renderEditor() {
+  var box = document.getElementById("edBox");
+  if (S.vald === null) { box.innerHTML = ""; return; }
+
+  var d = S.vald;
+  var datum = new Date(S.pek.y, S.pek.m, d);
+  var p = S.pass[d] || {};
+  var senaste = S.inst.senaste;
+
+  var h = '<div class="ed">';
+  h += '<div class="ed-top"><span class="ed-date">' + DAG[datum.getDay()] + ' ' + d + ' ' + MAN[S.pek.m] +
+       '</span><span class="ed-pay" id="edPay"></span></div>';
+  h += '<div class="red" id="edRed"></div>';
+  h += '<div class="times">' +
+    '<div class="tf"><label for="inS">Börjar</label>' +
+      '<input id="inS" type="time" step="900" value="' + esc(p.s || "") + '"></div>' +
+    '<span class="dash">–</span>' +
+    '<div class="tf"><label for="inE">Slutar</label>' +
+      '<input id="inE" type="time" step="900" value="' + esc(p.e || "") + '"></div>' +
+    '<div class="tf" style="flex:0 1 84px"><label for="inR">Rast (min)</label>' +
+      '<input id="inR" type="number" inputmode="numeric" min="0" step="5" value="' +
+      (p.r !== undefined ? p.r : S.inst.rast) + '"></div>' +
+    '</div>';
+  h += '<div class="chips">' +
+    '<button class="chip" data-s="' + senaste.s + '" data-e="' + senaste.e + '" data-r="' + senaste.r +
+      '">Som senast ' + senaste.s + '–' + senaste.e + '</button>' +
+    '<button class="chip" data-s="07:00" data-e="16:00">07:00–16:00</button>' +
+    '<button class="chip" data-s="10:00" data-e="19:00">10:00–19:00</button>' +
+    '<button class="chip" data-s="14:00" data-e="22:15">14:00–22:15</button>' +
+    (S.pass[d] ? '<button class="chip" id="taBort" data-danger="true">Ta bort</button>' : '') +
+    '</div>';
+  h += '<div class="split" id="edSplit"></div></div>';
+  box.innerHTML = h;
+
+  function knyt(id, falt, tolka) {
+    document.getElementById(id).addEventListener("input", function (ev) {
+      var v = tolka ? tolka(ev.target.value) : ev.target.value;
+      var delta = {}; delta[falt] = v;
+      andraDag(d, delta);
+      ritaLatt();
+    });
+  }
+  knyt("inS", "s");
+  knyt("inE", "e");
+  knyt("inR", "r", function (v) { return Number(v) || 0; });
+
+  box.querySelectorAll(".chip[data-s]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      andraDag(d, {
+        s: btn.getAttribute("data-s"),
+        e: btn.getAttribute("data-e"),
+        r: btn.hasAttribute("data-r") ? Number(btn.getAttribute("data-r")) : S.inst.rast
+      });
+      rita();
+    });
+  });
+  var tb = document.getElementById("taBort");
+  if (tb) tb.addEventListener("click", function () {
+    delete S.pass[d]; sparaManad(); S.vald = null; rita();
+  });
+
+  renderEditorDelar();
+}
+
+function renderEditorDelar() {
+  if (S.vald === null) return;
+  var d = S.vald;
+  var datum = new Date(S.pek.y, S.pek.m, d);
+  var info = dagInfo(datum, S.inst.rodaDagar);
+  var r = raknaPass(datum, S.pass[d], S.inst);
+  var tl = timlon();
+
+  var lon = r ? r.tim * tl + r.per[50] * tl * 0.5 + r.per[70] * tl * 0.7 + r.per[100] * tl : 0;
+  var payEl = document.getElementById("edPay");
+  if (payEl) payEl.textContent = kr(lon);
+
+  var redEl = document.getElementById("edRed");
+  if (redEl) redEl.textContent = info
+    ? info.namn + " · " + (info.typ === "rod" ? "100 % OB hela dagen" : "100 % OB efter 12.00")
+    : "";
+
+  var splitEl = document.getElementById("edSplit");
+  if (!splitEl) return;
+  if (!r || r.tim <= 0) { splitEl.innerHTML = ""; return; }
+
+  var h = '<div class="row"><span class="k">Arbetad tid</span><span class="h">' + tim(r.tim) +
+          '</span><span class="v">' + kr(r.tim * tl) + '</span></div>';
+  [50, 70, 100].forEach(function (p) {
+    if (r.per[p] > 0) {
+      h += '<div class="row"><span class="k"><i class="dot" style="background:' + FARG[p] + '"></i>OB ' +
+        p + ' %</span><span class="h">' + tim(r.per[p]) + '</span><span class="v">' +
+        kr(r.per[p] * tl * (p / 100)) + '</span></div>';
+    }
+  });
+  if (r.overMidnatt) {
+    h += '<div class="note" style="text-align:left">Passet går över midnatt. Nästa dags OB-regler gäller efter 00.00.</div>';
+  }
+  splitEl.innerHTML = h;
+}
+
+function renderSet() {
+  var box = document.getElementById("setBox");
+  if (!S.visaInst) { box.innerHTML = ""; return; }
+  var i = S.inst;
+
+  var h = '<div class="set"><h2>Lön</h2><div class="fields">';
+  h += '<div class="field"><label for="fForm">Löneform</label><select id="fForm">' +
+    '<option value="tim"' + (i.form === "tim" ? " selected" : "") + '>Timlön</option>' +
+    '<option value="manad"' + (i.form === "manad" ? " selected" : "") + '>Månadslön</option>' +
+    '</select></div>';
+  if (i.form === "tim") {
+    h += '<div class="field"><label for="fTimlon">Timlön (kr)</label>' +
+      '<input id="fTimlon" type="number" inputmode="decimal" min="0" step="0.01" value="' + i.timlon + '"></div>';
+  } else {
+    h += '<div class="field"><label for="fManadslon">Månadslön (kr)</label>' +
+      '<input id="fManadslon" type="number" inputmode="decimal" min="0" step="1" value="' + i.manadslon + '"></div>';
+  }
+  h += '<div class="field"><label for="fRast">Rast som standard (min)</label>' +
+    '<input id="fRast" type="number" inputmode="numeric" min="0" step="5" value="' + i.rast + '"></div>';
+  h += '</div>';
+  if (i.form === "manad") {
+    h += '<div class="note" style="text-align:left">OB räknas på timlönen ' + kr(timlon()) +
+         ', alltså månadslönen delad med 166 enligt avtalet.</div>';
+  }
+
+  h += '<h2 class="seth">OB-regler</h2>';
+  h += '<label class="check"><input type="checkbox" id="fCoop"' + (i.coopMorgon ? " checked" : "") +
+       '>Coops morgon-OB: 50 % måndag–lördag 05.00–06.00</label>';
+  h += '<label class="check"><input type="checkbox" id="fRoda"' + (i.rodaDagar ? " checked" : "") +
+       '>Räkna röda dagar och helgaftnar automatiskt</label>';
+  h += '<label class="check"><input type="checkbox" id="fNatt"' + (i.nattOB ? " checked" : "") +
+       '>Natt-OB: 70 % 00.00–05.00 måndag–lördag (tolkning av ”efter 20.00”)</label>';
+  h += '<div class="rules"><b>Måndag–fredag 18.15–20.00</b> 50 %<br>' +
+    '<b>Måndag–fredag efter 20.00</b> 70 %<br>' +
+    '<b>Lördag efter 12.00</b> 100 %<br>' +
+    '<b>Söndag och röd dag</b> 100 % hela dygnet<br>' +
+    '<b>Jul-, nyårs-, påsk- och midsommarafton</b> 100 % efter 12.00<br>' +
+    '<b>Coop, måndag–lördag 05.00–06.00</b> 50 %</div>';
+
+  h += '<h2 class="seth">Skatt</h2>';
+  h += '<label class="check"><input type="checkbox" id="fSkatt"' + (i.raknaSkatt ? " checked" : "") +
+       '>Räkna ut preliminärskatt och netto</label>';
+  if (i.raknaSkatt) {
+    h += '<div class="fields" style="margin-top:12px">' +
+      '<div class="field"><label for="fKs">Kommunalskatt inkl. region (%)</label>' +
+        '<input id="fKs" type="number" inputmode="decimal" min="0" max="40" step="0.01" value="' + i.kommunalskatt + '"></div>' +
+      '<div class="field"><label for="fBa">Begravningsavgift (%)</label>' +
+        '<input id="fBa" type="number" inputmode="decimal" min="0" max="2" step="0.001" value="' + i.begravningsavgift + '"></div>' +
+      '<div class="field"><label for="fAlder">Ålder vid årets ingång</label><select id="fAlder">' +
+        '<option value="u18"' + (i.alder === "u18" ? " selected" : "") + '>Under 18 år</option>' +
+        '<option value="vux"' + (i.alder === "vux" ? " selected" : "") + '>18–65 år</option>' +
+        '<option value="66"' + (i.alder === "66" ? " selected" : "") + '>66 år eller äldre</option>' +
+      '</select></div></div>';
+    h += '<label class="check"><input type="checkbox" id="fKyrka"' + (i.kyrkomedlem ? " checked" : "") +
+         '>Medlem i Svenska kyrkan eller annat trossamfund</label>';
+    if (i.kyrkomedlem) {
+      h += '<div class="fields" style="margin-top:10px"><div class="field">' +
+        '<label for="fKa">Kyrkoavgift (%)</label>' +
+        '<input id="fKa" type="number" inputmode="decimal" min="0" max="3" step="0.01" value="' + i.kyrkoavgift + '"></div></div>';
+    }
+    h += '<div class="rules">Räknat efter Skatteverkets tekniska beskrivning av skattetabellerna ' +
+      'för 2026: grundavdrag, jobbskatteavdrag, skattereduktion för förvärvsinkomst och allmän ' +
+      'pensionsavgift, statlig skatt över ' + kr(SKIKT) + ' beskattningsbar inkomst samt public ' +
+      'service-avgift. Prisbasbelopp ' + kr(PBB) + '.<br><br>Skattesatsen för din kommun finns på ' +
+      'skatteverket.se. Riksgenomsnittet för 2026 är 32,38 %.</div>';
+  }
+
+  h += '<button class="reset" id="fReset">Ta bort alla inlagda pass</button></div>';
+  box.innerHTML = h;
+
+  function text(id, falt) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("input", function (ev) {
+      S.inst[falt] = ev.target.value; sparaInst(); ritaLatt();
+    });
+  }
+  function vaxel(id, falt) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("change", function (ev) {
+      S.inst[falt] = ev.target.type === "checkbox" ? ev.target.checked : ev.target.value;
+      sparaInst(); rita();
+    });
+  }
+  text("fTimlon", "timlon"); text("fManadslon", "manadslon");
+  text("fKs", "kommunalskatt"); text("fBa", "begravningsavgift"); text("fKa", "kyrkoavgift");
+  var rastEl = document.getElementById("fRast");
+  if (rastEl) rastEl.addEventListener("input", function (ev) {
+    S.inst.rast = Number(ev.target.value) || 0; sparaInst();
+  });
+  vaxel("fForm", "form"); vaxel("fAlder", "alder");
+  vaxel("fCoop", "coopMorgon"); vaxel("fRoda", "rodaDagar"); vaxel("fNatt", "nattOB");
+  vaxel("fSkatt", "raknaSkatt"); vaxel("fKyrka", "kyrkomedlem");
+
+  document.getElementById("fReset").addEventListener("click", function () {
+    if (!confirm("Ta bort alla pass du lagt in, för alla månader? Lön och regler sparas.")) return;
+    try {
+      Object.keys(localStorage).forEach(function (k) {
+        if (k.indexOf("coop:") === 0 && k !== "coop:installningar") localStorage.removeItem(k);
+      });
+      S.pass = {}; S.vald = null;
+      visaMedd("Alla inlagda pass är borttagna. Lön och regler är kvar.");
+    } catch (err) { visaMedd("Kunde inte rensa. Försök igen."); }
+    rita();
+  });
+}
+
+function renderFot() {
+  var t = "Rasten dras av mitt i passet.";
+  if (S.inst.raknaSkatt) {
+    t += " Skatten räknas som i arbetsgivarens skattetabell: som om du tjänar lika mycket varje " +
+         "månad hela året. Din slutliga skatt kan bli en annan.";
+  }
+  t += " Allt sparas bara i den här webbläsaren.";
+  document.getElementById("fot").textContent = t;
+}
+
+/* Full omritning */
+function rita() {
+  document.getElementById("titel").innerHTML = MAN[S.pek.m] + ' <span>' + S.pek.y + '</span>';
+  document.getElementById("toggleSet").setAttribute("data-on", String(S.visaInst));
+  var B = berakna();
+  renderStub(B);
+  renderGrid(B);
+  renderSet();
+  renderEditor();
+  renderFot();
+}
+/* Lätt omritning: rör inte fälten man skriver i */
+function ritaLatt() {
+  var B = berakna();
+  renderStub(B);
+  renderGrid(B);
+  renderEditorDelar();
+  renderFot();
+}
+
+/* ================================================================== */
+/*  Start                                                             */
+/* ================================================================== */
+
+document.getElementById("prev").addEventListener("click", function () {
+  var d = new Date(S.pek.y, S.pek.m - 1, 1);
+  S.pek = { y: d.getFullYear(), m: d.getMonth() };
+  S.vald = null; laddaManad(); rita();
+});
+document.getElementById("next").addEventListener("click", function () {
+  var d = new Date(S.pek.y, S.pek.m + 1, 1);
+  S.pek = { y: d.getFullYear(), m: d.getMonth() };
+  S.vald = null; laddaManad(); rita();
+});
+document.getElementById("toggleSet").addEventListener("click", function () {
+  S.visaInst = !S.visaInst; rita();
+});
+
+laddaManad();
+rita();
+</script>
+</body>
+</html>
