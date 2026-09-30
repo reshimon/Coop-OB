@@ -114,6 +114,7 @@ button { font:inherit; color:inherit; cursor:pointer; }
 .chip { border:1px solid var(--line); background:var(--paper); border-radius:2px; padding:6px 10px;
   font-family:var(--mono); font-size:11px; letter-spacing:.03em; }
 .chip:hover { border-color:var(--ink); }
+label.chip { display:inline-flex; align-items:center; }
 .chip[data-danger="true"] { color:var(--p70); border-color:#E3C4B7; margin-left:auto; }
 .split:not(:empty) { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
 
@@ -469,6 +470,7 @@ var S = {
   pass: {},
   vald: null,
   visaInst: false,
+  import: null,
   visaSkatt: false
 };
 
@@ -483,6 +485,124 @@ function visaMedd(text) {
   var el = document.getElementById("medd");
   el.textContent = text || "";
   el.hidden = !text;
+}
+
+/* ================================================================== */
+/*  Säkerhetskopia: export och import av JSON                         */
+/* ================================================================== */
+
+var TID_RE = /^\d{1,2}:\d{2}$/;
+function harInnehall(o) { return o && typeof o === "object" && Object.keys(o).length > 0; }
+
+function allaManader() {
+  var ut = {};
+  try {
+    Object.keys(localStorage).forEach(function (k) {
+      if (k.indexOf("coop:") !== 0 || k === "coop:installningar") return;
+      var id = k.slice(5);
+      if (!/^\d{4}-\d{2}$/.test(id)) return;
+      var v = las(k, null);
+      if (harInnehall(v)) ut[id] = v;
+    });
+  } catch (err) { /* lagring blockerad */ }
+  if (harInnehall(S.pass)) ut[manadsId()] = S.pass;
+  return ut;
+}
+
+function exportera() {
+  var manader = allaManader();
+  if (!harInnehall(manader)) { visaMedd("Det finns inga pass att exportera än."); return; }
+
+  var data = {
+    format: "ob-kalender",
+    version: 1,
+    exporterad: new Date().toISOString(),
+    installningar: S.inst,
+    manader: manader
+  };
+  try {
+    var json = JSON.stringify(data, null, 2);
+    var objektUrl = null;
+    if (typeof URL !== "undefined" && URL.createObjectURL) {
+      objektUrl = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+    }
+    var d = new Date();
+    var a = document.createElement("a");
+    a.href = objektUrl || ("data:application/json;charset=utf-8," + encodeURIComponent(json));
+    a.download = "ob-kalender-" + d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + ".json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    if (objektUrl) setTimeout(function () { URL.revokeObjectURL(objektUrl); }, 1000);
+    visaMedd("Säkerhetskopian är nedladdad.");
+  } catch (err) {
+    visaMedd("Kunde inte skapa filen i den här webbläsaren.");
+  }
+}
+
+// Läser både hela säkerhetskopior och en naken lista med månader.
+// Allt som inte ser ut som ett pass hoppas över i stället för att stoppa importen.
+function tolkaImport(text) {
+  var rot = JSON.parse(text);
+  if (!rot || typeof rot !== "object") throw new Error("fel format");
+  var kalla = (rot.manader && typeof rot.manader === "object") ? rot.manader : rot;
+
+  var manader = {}, antalPass = 0, skippade = 0;
+  Object.keys(kalla).forEach(function (id) {
+    var dagar = kalla[id];
+    if (!/^\d{4}-\d{2}$/.test(id) || !dagar || typeof dagar !== "object") { skippade++; return; }
+    var rena = {};
+    Object.keys(dagar).forEach(function (nyckel) {
+      var d = Number(nyckel), p = dagar[nyckel];
+      var ok = d >= 1 && d <= 31 && p && typeof p === "object" &&
+               TID_RE.test(String(p.s)) && TID_RE.test(String(p.e));
+      if (!ok) { skippade++; return; }
+      rena[d] = { s: String(p.s), e: String(p.e), r: Math.max(0, Number(p.r) || 0) };
+      antalPass++;
+    });
+    if (harInnehall(rena)) manader[id] = rena;
+  });
+  if (!antalPass) throw new Error("inga pass");
+
+  var inst = null;
+  if (rot.installningar && typeof rot.installningar === "object") {
+    inst = {};
+    Object.keys(STANDARD).forEach(function (k) {
+      if (rot.installningar[k] !== undefined) inst[k] = rot.installningar[k];
+    });
+  }
+  return {
+    manader: manader, inst: inst, taInst: !!inst,
+    antalPass: antalPass, antalMan: Object.keys(manader).length, skippade: skippade
+  };
+}
+
+function tillampaImport(ersatt) {
+  var imp = S.import;
+  if (!imp) return;
+  if (ersatt) {
+    try {
+      Object.keys(localStorage).forEach(function (k) {
+        if (k.indexOf("coop:") === 0 && k !== "coop:installningar") localStorage.removeItem(k);
+      });
+    } catch (err) { /* lagring blockerad */ }
+  }
+  var ok = true;
+  Object.keys(imp.manader).forEach(function (id) {
+    var bef = ersatt ? {} : las("coop:" + id, {});
+    if (!spara("coop:" + id, Object.assign(bef, imp.manader[id]))) ok = false;
+  });
+  if (imp.inst && imp.taInst) {
+    S.inst = Object.assign({}, STANDARD, S.inst, imp.inst);
+    sparaInst();
+  }
+  laddaManad();
+  S.vald = null;
+  S.import = null;
+  visaMedd(ok
+    ? (ersatt ? "Importen ersatte allt som fanns." : "Passen är tillagda.")
+    : "Allt kunde inte sparas. Webbläsaren kan ha slut på utrymme.");
+  rita();
 }
 
 /* ================================================================== */
@@ -821,6 +941,35 @@ function renderSet() {
       'skatteverket.se. Riksgenomsnittet för 2026 är 32,38 %.</div>';
   }
 
+  h += '<h2 class="seth">Säkerhetskopia</h2>';
+  h += '<div class="chips" style="margin-top:0">' +
+    '<button class="chip" id="fExport">Exportera JSON</button>' +
+    '<label class="chip" for="fFil">Importera JSON</label>' +
+    '<input type="file" id="fFil" accept="application/json,.json" hidden></div>';
+
+  if (S.import) {
+    var imp = S.import;
+    h += '<div class="rules" style="border-color:var(--ink)">' +
+      '<b>' + imp.antalPass + ' pass i ' + imp.antalMan + ' månad' + (imp.antalMan === 1 ? '' : 'er') +
+      '</b> hittades i filen.' +
+      (imp.skippade ? '<br>' + imp.skippade + ' rad' + (imp.skippade === 1 ? '' : 'er') +
+        ' hoppades över eftersom de inte såg ut som pass.' : '') +
+      '</div>';
+    if (imp.inst) {
+      h += '<label class="check"><input type="checkbox" id="fImpInst"' + (imp.taInst ? " checked" : "") +
+        '>Ta även med lön och regler från filen</label>';
+    }
+    h += '<div class="chips">' +
+      '<button class="chip" id="impAdd">Lägg till</button>' +
+      '<button class="chip" id="impReplace">Ersätt allt</button>' +
+      '<button class="chip" id="impCancel" data-danger="true">Avbryt</button></div>';
+  }
+
+  h += '<div class="rules">Filen innehåller dina pass och inställningar som vanlig text. ' +
+    'Använd den för att flytta allt till en annan webbläsare eller telefon, eller som backup ' +
+    'innan du rensar webbläsaren. <b>Lägg till</b> behåller det du redan har och skriver bara ' +
+    'över dagar som finns i filen. <b>Ersätt allt</b> tar bort alla pass först.</div>';
+
   h += '<button class="reset" id="fReset">Ta bort alla inlagda pass</button></div>';
   box.innerHTML = h;
 
@@ -846,6 +995,38 @@ function renderSet() {
   vaxel("fForm", "form"); vaxel("fAlder", "alder");
   vaxel("fCoop", "coopMorgon"); vaxel("fRoda", "rodaDagar"); vaxel("fNatt", "nattOB");
   vaxel("fSkatt", "raknaSkatt"); vaxel("fKyrka", "kyrkomedlem");
+
+  document.getElementById("fExport").addEventListener("click", exportera);
+
+  document.getElementById("fFil").addEventListener("change", function (ev) {
+    var fil = ev.target.files && ev.target.files[0];
+    ev.target.value = "";
+    if (!fil) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      try {
+        S.import = tolkaImport(String(fr.result));
+        visaMedd("");
+      } catch (err) {
+        S.import = null;
+        visaMedd("Kunde inte läsa filen. Den verkar inte innehålla några pass.");
+      }
+      rita();
+    };
+    fr.onerror = function () { visaMedd("Kunde inte läsa filen."); };
+    fr.readAsText(fil);
+  });
+
+  var impInst = document.getElementById("fImpInst");
+  if (impInst) impInst.addEventListener("change", function (ev) { S.import.taInst = ev.target.checked; });
+  var impAdd = document.getElementById("impAdd");
+  if (impAdd) impAdd.addEventListener("click", function () { tillampaImport(false); });
+  var impRep = document.getElementById("impReplace");
+  if (impRep) impRep.addEventListener("click", function () {
+    if (confirm("Ersätta alla pass du har nu med dem i filen?")) tillampaImport(true);
+  });
+  var impCan = document.getElementById("impCancel");
+  if (impCan) impCan.addEventListener("click", function () { S.import = null; rita(); });
 
   document.getElementById("fReset").addEventListener("click", function () {
     if (!confirm("Ta bort alla pass du lagt in, för alla månader? Lön och regler sparas.")) return;
